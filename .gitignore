@@ -1,0 +1,5 @@
+# Local dev proxy keeps /api same-origin, but the built app needs the absolute
+# Render URL. This file is gitignored; .env.example is committed as a template.
+.env
+node_modules/
+dist/

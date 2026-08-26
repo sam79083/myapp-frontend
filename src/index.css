@@ -1,0 +1,16 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #fafafa;
+  color: #111;
+}
+input,
+button {
+  padding: 6px 10px;
+  font-size: 14px;
+}
+button {
+  cursor: pointer;
+}
