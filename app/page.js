@@ -11,11 +11,12 @@ export default function Home() {
   async function load() {
     setError("");
     const res = await fetch("/api/items");
+    const data = await res.json();
     if (!res.ok) {
-      setError("Failed to load items");
+      setError(data.error || "Failed to load items");
       return;
     }
-    setItems(await res.json());
+    setItems(data);
   }
 
   useEffect(() => {
