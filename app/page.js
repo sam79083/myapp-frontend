@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function Home() {
   const [items, setItems] = useState([]);
@@ -21,6 +22,19 @@ export default function Home() {
 
   useEffect(() => {
     load();
+
+    const channel = supabase
+      .channel("core_item-changes")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "core_item" },
+        () => load(),
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   async function add(e) {
