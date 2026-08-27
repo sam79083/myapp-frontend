@@ -4,25 +4,29 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function Home() {
+  const [user, setUser] = useState(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [items, setItems] = useState([]);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
 
-  async function load() {
-    setError("");
-    const res = await fetch("/api/items");
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error || "Failed to load items");
-      return;
-    }
-    setItems(data);
-  }
-
+  // Track auth state
   useEffect(() => {
-    load();
+    supabase.auth.getSession().then(({ data }) =>
+      setUser(data.session?.user ?? null),
+    );
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) =>
+      setUser(session?.user ?? null),
+    );
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
+  // Load items + live updates (only when logged in)
+  useEffect(() => {
+    if (!user) return;
+    load();
     const channel = supabase
       .channel("core_item-changes")
       .on(
@@ -31,37 +35,93 @@ export default function Home() {
         () => load(),
       )
       .subscribe();
+    return () => supabase.removeChannel(channel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
+  async function load() {
+    setError("");
+    const { data, error } = await supabase
+      .from("core_item")
+      .select("*")
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+    if (error) setError(error.message);
+    else setItems(data);
+  }
+
+  async function signUp(e) {
+    e.preventDefault();
+    setError("");
+    const { error } = await supabase.auth.signUp({ email, password });
+    if (error) setError(error.message);
+  }
+
+  async function signIn(e) {
+    e.preventDefault();
+    setError("");
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setError(error.message);
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    setItems([]);
+  }
 
   async function add(e) {
     e.preventDefault();
     if (!title.trim()) return;
-    const res = await fetch("/api/items", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, description }),
-    });
-    if (res.ok) {
+    const { error } = await supabase
+      .from("core_item")
+      .insert({ title, description, user_id: user.id, is_active: true });
+    if (error) setError(error.message);
+    else {
       setTitle("");
       setDescription("");
-      load();
-    } else {
-      setError("Failed to add item");
     }
   }
 
   async function del(id) {
-    await fetch(`/api/items/${id}`, { method: "DELETE" });
-    load();
+    await supabase
+      .from("core_item")
+      .update({ is_active: false })
+      .eq("id", id);
+  }
+
+  if (!user) {
+    return (
+      <main style={{ maxWidth: 420, margin: "4rem auto", fontFamily: "system-ui" }}>
+        <h1>Toy App — Sign in</h1>
+        {error && <p style={{ color: "crimson" }}>{error}</p>}
+        <form onSubmit={signIn} style={{ display: "grid", gap: 8 }}>
+          <input
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button type="submit">Sign In</button>
+          <button type="button" onClick={signUp}>
+            Sign Up
+          </button>
+        </form>
+      </main>
+    );
   }
 
   return (
     <main style={{ maxWidth: 640, margin: "2rem auto", fontFamily: "system-ui" }}>
-      <h1>Toy App (Next.js + Supabase)</h1>
+      <h1>Toy App</h1>
+      <p>
+        Signed in as {user.email}{" "}
+        <button onClick={signOut}>Logout</button>
+      </p>
       {error && <p style={{ color: "crimson" }}>{error}</p>}
 
       <form onSubmit={add} style={{ display: "flex", gap: 8, marginBottom: 16 }}>
